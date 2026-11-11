@@ -30,6 +30,10 @@ public abstract class CheckLicense extends LicenseTask {
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract RegularFileProperty getLicenseFile();
 
+    @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract RegularFileProperty getHeaderFile();
+
     @InputFiles
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract ConfigurableFileCollection getSources();
@@ -37,6 +41,7 @@ public abstract class CheckLicense extends LicenseTask {
     @TaskAction
     public void check() throws IOException {
         License selected = license();
+        String header = HeaderFiles.read(getHeaderFile().get().getAsFile(), selected.getIdentifier());
         List<String> failures = new ArrayList<>();
         File licenseFile = getLicenseFile().get().getAsFile();
         String text = new String(Files.readAllBytes(licenseFile.toPath()), StandardCharsets.UTF_8);
@@ -45,7 +50,7 @@ public abstract class CheckLicense extends LicenseTask {
         }
         for (File file : getSources()) {
             String source = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
-            if (!JavaHeaders.hasHeader(source, selected)) {
+            if (!JavaHeaders.hasHeader(source, header)) {
                 failures.add("Missing or different license header: " + file);
             }
         }

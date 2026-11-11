@@ -30,6 +30,7 @@ public class FeltPluginTest {
         write(root.resolve("build/ignored/Generated.java"), "class Generated {}\n");
         run(root, "generateLicense", "applyLicenseHeader", "check", "--configuration-cache").build();
         String licensed = read(source);
+        assertEquals(new License("MIT", "Example Authors", "2026").renderJavaHeader(), read(root.resolve("HEADER")));
         assertTrue(licensed.contains("SPDX-License-Identifier: MIT"));
         assertEquals("class Generated {}\n", read(root.resolve("build/ignored/Generated.java")));
         run(root, "check", "--configuration-cache").build();
@@ -99,6 +100,66 @@ public class FeltPluginTest {
         assertTrue(failed.getOutput().contains("different license notice"));
         assertEquals("package example;\nclass Fresh {}\n", read(fresh));
         assertTrue(read(old).startsWith("/* Copyright (c) 2020 Original Author */"));
+    }
+
+    @Test
+    public void appliesAndChecksCustomHeaderFileWithoutOverwritingIt() throws IOException {
+        Path root = fixture();
+        String header = "/*\r\n * Copyright (c) 2020-2026 Project Contributors\r\n"
+                + " * Custom project notice.\r\n * SPDX-License-Identifier: MIT\r\n */\r\n";
+        write(root.resolve("HEADER"), header);
+        Path source = root.resolve("src/main/java/example/Example.java");
+        write(source, "package example;\nclass Example {}\n");
+        run(root, "generateLicense", "applyLicenseHeader", "checkLicense", "--configuration-cache").build();
+        assertEquals(header, read(root.resolve("HEADER")));
+        assertTrue(read(source).startsWith(header.replace("\r\n", "\n") + "\n"));
+        assertTrue(read(root.resolve("LICENSE.md")).startsWith("MIT License\n"));
+        run(root, "checkLicense", "--configuration-cache").build();
+        BuildResult reused = run(root, "checkLicense", "--configuration-cache").build();
+        assertTrue(reused.getOutput().contains("Reusing configuration cache."));
+        write(root.resolve("HEADER"), header.replace("Custom project notice.", "Edited project notice."));
+        BuildResult changed = run(root, "checkLicense", "--configuration-cache").buildAndFail();
+        assertTrue(changed.getOutput().contains("Missing or different license header"));
+        assertFalse(read(source).contains("Edited project notice."));
+    }
+
+    @Test
+    public void checkDoesNotGenerateMissingHeaderFile() throws IOException {
+        Path root = fixture();
+        write(root.resolve("LICENSE.md"), new License("MIT", "Example Authors", "2026").renderText());
+        run(root, "checkLicense").buildAndFail();
+        assertFalse(Files.exists(root.resolve("HEADER")));
+    }
+
+    @Test
+    public void supportsAConfiguredHeaderPathAndStandaloneHeaderGeneration() throws IOException {
+        Path root = fixture();
+        Files.write(root.resolve("build.gradle.kts"),
+                "\nfelt { headerFile = layout.projectDirectory.file(\"config/HEADER\") }\n"
+                        .getBytes(StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.APPEND);
+        Path source = root.resolve("src/main/java/example/Example.java");
+        write(source, "package example;\nclass Example {}\n");
+        run(root, "generateLicenseHeader", "--configuration-cache").build();
+        assertFalse(Files.exists(root.resolve("HEADER")));
+        assertFalse(Files.exists(root.resolve("LICENSE.md")));
+        assertEquals(new License("MIT", "Example Authors", "2026").renderJavaHeader(), read(root.resolve("config/HEADER")));
+        run(root, "applyLicenseHeader", "--configuration-cache").build();
+        assertTrue(read(source).startsWith(read(root.resolve("config/HEADER"))));
+        assertFalse(Files.exists(root.resolve("LICENSE.md")));
+    }
+
+    @Test
+    public void refusesMismatchedHeaderLicenseBeforeEditingSources() throws IOException {
+        Path root = fixture();
+        String header = new License("Apache-2.0", "Other Authors", "2026").renderJavaHeader();
+        write(root.resolve("HEADER"), header);
+        Path source = root.resolve("src/main/java/example/Example.java");
+        String original = "package example;\nclass Example {}\n";
+        write(source, original);
+        BuildResult result = run(root, "applyLicenseHeader").buildAndFail();
+        assertTrue(result.getOutput().contains("SPDX identifier does not match"));
+        assertEquals(header, read(root.resolve("HEADER")));
+        assertEquals(original, read(source));
     }
 
     private Path fixture() throws IOException {

@@ -23,20 +23,31 @@ public final class FeltPlugin implements Plugin<Project> {
         extension.getAuthor().convention(project.getProviders().gradleProperty("license_author"));
         extension.getYear().convention(project.getProviders().gradleProperty("license_year"));
         extension.getLicenseFile().convention(project.getLayout().getProjectDirectory().file("LICENSE.md"));
+        extension.getHeaderFile().convention(project.getLayout().getProjectDirectory().file("HEADER"));
+
+        TaskProvider<GenerateLicenseHeader> generateHeader = project.getTasks().register(
+                "generateLicenseHeader", GenerateLicenseHeader.class, task -> {
+                    configure(task, extension, "Generate HEADER without replacing an existing header.");
+                    task.getHeaderFile().set(extension.getHeaderFile());
+                });
 
         TaskProvider<GenerateLicense> generate = project.getTasks().register("generateLicense", GenerateLicense.class, task -> {
-            configure(task, extension, "Generate LICENSE.md without replacing existing notices.");
+            configure(task, extension, "Generate LICENSE.md and HEADER without replacing existing notices.");
             task.getLicenseFile().set(extension.getLicenseFile());
+            task.dependsOn(generateHeader);
         });
         TaskProvider<ApplyLicenseHeader> apply = project.getTasks().register("applyLicenseHeader", ApplyLicenseHeader.class, task -> {
             configure(task, extension, "Add license headers to Java sources.");
             task.getSources().from(extension.getSources());
+            task.getHeaderFile().set(extension.getHeaderFile());
+            task.dependsOn(generateHeader);
         });
         TaskProvider<CheckLicense> check = project.getTasks().register("checkLicense", CheckLicense.class, task -> {
             configure(task, extension, "Check LICENSE.md and Java source headers.");
             task.getLicenseFile().set(extension.getLicenseFile());
+            task.getHeaderFile().set(extension.getHeaderFile());
             task.getSources().from(extension.getSources());
-            task.mustRunAfter(generate, apply);
+            task.mustRunAfter(generate, generateHeader, apply);
         });
 
         project.getTasks().withType(JavaCompile.class).configureEach(task -> task.mustRunAfter(apply));

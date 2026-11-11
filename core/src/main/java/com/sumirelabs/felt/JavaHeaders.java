@@ -15,13 +15,22 @@ public final class JavaHeaders {
     }
 
     public static boolean hasHeader(String source, License license) {
+        return hasHeader(source, license.renderJavaHeader());
+    }
+
+    public static boolean hasHeader(String source, String header) {
         return normalize(withoutBom(Objects.requireNonNull(source, "source")))
-                .startsWith(license.renderJavaHeader());
+                .startsWith(validate(header));
     }
 
     public static String apply(String source, License license) {
+        return apply(source, license.renderJavaHeader());
+    }
+
+    public static String apply(String source, String header) {
         Objects.requireNonNull(source, "source");
-        if (hasHeader(source, license)) {
+        String validated = validate(header);
+        if (hasHeader(source, validated)) {
             return source;
         }
         String body = withoutBom(source);
@@ -49,7 +58,31 @@ public final class JavaHeaders {
         }
         String newline = body.contains("\r\n") ? "\r\n" : "\n";
         String bom = source.startsWith("\uFEFF") ? "\uFEFF" : "";
-        return bom + license.renderJavaHeader().replace("\n", newline) + newline + body;
+        return bom + validated.replace("\n", newline) + newline + body;
+    }
+
+    /** Validates a header consisting only of Java comments and normalizes its line endings. */
+    public static String validate(String header) {
+        String text = normalize(withoutBom(Objects.requireNonNull(header, "header"))).trim();
+        if (text.isEmpty()) {
+            throw new IllegalArgumentException("Header must not be empty.");
+        }
+        String remaining = text;
+        while (!remaining.isEmpty()) {
+            if (remaining.startsWith("/*")) {
+                int end = remaining.indexOf("*/", 2);
+                if (end < 0) {
+                    throw new IllegalArgumentException("Header contains an unterminated comment.");
+                }
+                remaining = remaining.substring(end + 2).trim();
+            } else if (remaining.startsWith("//")) {
+                int end = remaining.indexOf('\n');
+                remaining = end < 0 ? "" : remaining.substring(end + 1).trim();
+            } else {
+                throw new IllegalArgumentException("Header must contain only Java comments.");
+            }
+        }
+        return text + "\n";
     }
 
     public static String normalize(String text) {

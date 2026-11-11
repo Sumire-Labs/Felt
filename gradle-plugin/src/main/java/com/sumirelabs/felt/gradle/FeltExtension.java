@@ -20,5 +20,7 @@ public abstract class FeltExtension {
 
     public abstract RegularFileProperty getLicenseFile();
 
+    public abstract RegularFileProperty getHeaderFile();
+
     public abstract ConfigurableFileCollection getSources();
 }

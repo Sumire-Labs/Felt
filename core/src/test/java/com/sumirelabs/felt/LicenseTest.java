@@ -42,6 +42,29 @@ public class LicenseTest {
     }
 
     @Test
+    public void appliesCustomCommentHeadersAndPreservesSourceEncoding() {
+        String header = "/* Custom project notice. */\r\n// SPDX-License-Identifier: MIT\r\n";
+        String source = "\uFEFFpackage example;\r\nclass Example {}\r\n";
+        String updated = JavaHeaders.apply(source, header);
+        assertTrue(updated.startsWith("\uFEFF" + header + "\r\n"));
+        assertTrue(updated.endsWith(source.substring(1)));
+        assertTrue(JavaHeaders.hasHeader(updated, header));
+        assertEquals(updated, JavaHeaders.apply(updated, header));
+    }
+
+    @Test
+    public void refusesEmptyHeadersAndHeadersContainingCode() {
+        for (String header : new String[] {"", "   ", "/* Unclosed", "/* Comment */\nclass Injected {}"}) {
+            try {
+                JavaHeaders.apply("class Example {}\n", header);
+                fail("Invalid HEADER must not be inserted into source files.");
+            } catch (IllegalArgumentException expected) {
+                assertFalse(expected.getMessage().isEmpty());
+            }
+        }
+    }
+
+    @Test
     public void preservesBomAndWindowsLineEndings() {
         String original = "\uFEFFpackage example;\r\n";
         String updated = JavaHeaders.apply(original, license);
