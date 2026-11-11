@@ -21,6 +21,45 @@ public class LicenseTest {
     }
 
     @Test
+    public void rendersOneCopyrightLinePerAuthorInHeadersAndMitText() {
+        License multiple = new License("MIT", " Alice , Bob, Sumire Labs ", "2024-2026");
+        assertEquals("/*\n * Copyright (c) 2024-2026 Alice\n * Copyright (c) 2024-2026 Bob\n"
+                + " * Copyright (c) 2024-2026 Sumire Labs\n * SPDX-License-Identifier: MIT\n */\n",
+                multiple.renderJavaHeader());
+        String text = multiple.renderText();
+        assertTrue(text.startsWith("MIT License\n\nCopyright (c) 2024-2026 Alice\n"
+                + "Copyright (c) 2024-2026 Bob\nCopyright (c) 2024-2026 Sumire Labs\n\nPermission"));
+        assertTrue(multiple.matchesText(text));
+        String inherited = text.replace("MIT License\n\n", "MIT License\n\nCopyright (c) 2020 Upstream Authors\n");
+        assertTrue(multiple.matchesText(inherited));
+        assertFalse(multiple.matchesText(inherited.replace("Copyright (c) 2024-2026 Bob\n", "")));
+        assertFalse(multiple.matchesText(inherited.replace("2024-2026 Bob", "2026 Bob")));
+    }
+
+    @Test
+    public void rejectsEmptyEntriesInAuthorLists() {
+        for (String author : new String[] {",Alice", "Alice,", "Alice,,Bob", "Alice, ,Bob"}) {
+            try {
+                new License("MIT", author, "2026");
+                fail("Empty author entries must not generate empty copyright notices.");
+            } catch (IllegalArgumentException expected) {
+                assertTrue(expected.getMessage().contains("author"));
+            }
+        }
+    }
+
+    @Test
+    public void keepsNonMitLicenseDocumentsUnchangedWithMultipleAuthors() {
+        for (String identifier : License.supportedIdentifiers()) {
+            if (!identifier.equals("MIT")) {
+                License multiple = new License(identifier, "Alice, Bob", "2026");
+                assertEquals(new License(identifier, "Alice", "2026").renderText(), multiple.renderText());
+                assertTrue(multiple.renderJavaHeader().contains("Copyright (c) 2026 Alice\n * Copyright (c) 2026 Bob\n"));
+            }
+        }
+    }
+
+    @Test
     public void acceptsAdditionalMitCopyrightNoticesWithoutDroppingThem() {
         String original = license.renderText();
         String inherited = original.replace("MIT License\n\n",

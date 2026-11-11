@@ -9,6 +9,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -16,12 +19,20 @@ import java.util.Objects;
 public final class License {
 
     private final BuiltInLicense type;
-    private final String author;
+    private final List<String> authors;
     private final String year;
 
     public License(String identifier, String author, String year) {
         this.type = BuiltInLicense.find(singleLine(identifier, "identifier"));
-        this.author = singleLine(author, "author");
+        List<String> parsedAuthors = new ArrayList<>();
+        for (String entry : singleLine(author, "author").split(",", -1)) {
+            String name = singleLine(entry, "author");
+            if (name.contains("*/")) {
+                throw new IllegalArgumentException("Author must not contain a block comment terminator.");
+            }
+            parsedAuthors.add(name);
+        }
+        this.authors = Collections.unmodifiableList(parsedAuthors);
         this.year = singleLine(year, "year");
         if (!this.year.matches("[0-9]{4}(-[0-9]{4})?")) {
             throw new IllegalArgumentException("Year must be YYYY or YYYY-YYYY.");
@@ -29,9 +40,6 @@ public final class License {
         if (this.year.length() == 9
                 && this.year.substring(0, 4).compareTo(this.year.substring(5)) > 0) {
             throw new IllegalArgumentException("Copyright year range is reversed.");
-        }
-        if (this.author.contains("*/")) {
-            throw new IllegalArgumentException("Author must not contain a block comment terminator.");
         }
     }
 
@@ -54,7 +62,7 @@ public final class License {
     public String renderText() {
         String text = readTemplate(type.resourceName);
         if (type == BuiltInLicense.MIT) {
-            return text.replace("${year}", year).replace("${author}", author);
+            return text.replace("Copyright (c) ${year} ${author}", copyrightNotices(""));
         }
         return text;
     }
@@ -80,15 +88,18 @@ public final class License {
             return false;
         }
         String[] notices = actual.substring(prefix.length(), noticesEnd).split("\n", -1);
-        String ownNotice = "Copyright (c) " + year + " " + author;
-        boolean found = false;
         for (String notice : notices) {
             if (!notice.matches("Copyright \\(c\\) [0-9]{4}(-[0-9]{4})? .+")) {
                 return false;
             }
-            found |= ownNotice.equals(notice);
         }
-        return found;
+        List<String> actualNotices = Arrays.asList(notices);
+        for (String author : authors) {
+            if (!actualNotices.contains("Copyright (c) " + year + " " + author)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static String readTemplate(String resourceName) {
@@ -111,9 +122,17 @@ public final class License {
 
     public String renderJavaHeader() {
         return "/*\n"
-                + " * Copyright (c) " + year + " " + author + "\n"
+                + copyrightNotices(" * ") + "\n"
                 + " * SPDX-License-Identifier: " + type.identifier + "\n"
                 + " */\n";
+    }
+
+    private String copyrightNotices(String prefix) {
+        List<String> notices = new ArrayList<>();
+        for (String author : authors) {
+            notices.add(prefix + "Copyright (c) " + year + " " + author);
+        }
+        return String.join("\n", notices);
     }
 
     private static String singleLine(String value, String name) {

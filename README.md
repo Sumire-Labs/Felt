@@ -37,6 +37,15 @@ Blue Oak 1.0.0
 検査ではファイルを生成・変更しません。既存のソースヘッダーが異なる場合は、内容を確認して手動で更新してください。
 HEADERにSPDX識別子を書く場合は、propertiesの`license`と揃えてください。
 
+`license_author`はカンマ区切りで複数指定できます。前後の空白を除き、1人につき1行の著作権表示を生成します。
+MITの場合はLICENSE.mdにも同じように記載します。
+
+```properties
+license_author = Alice, Bob, Sumire Labs
+```
+
+既存のHEADERは自動更新しません。著作権者を追加するときはHEADERとソースも確認して更新してください。
+
 保存先を変える場合は、次のように指定します。
 
 ```kotlin
@@ -48,7 +57,7 @@ felt {
 ## 開発
 
 リポジトリから以下の依存関係を追加します
-`com.sumirelabs:felt-core:0.2.0`
+`com.sumirelabs:felt-core:0.3.0`
 
 ## ライセンス
 

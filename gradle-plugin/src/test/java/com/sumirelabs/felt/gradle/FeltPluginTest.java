@@ -171,6 +171,28 @@ public class FeltPluginTest {
         return root;
     }
 
+    @Test
+    public void generatesAndChecksSeparateCopyrightLinesFromAuthorProperties() throws IOException {
+        Path root = fixture();
+        write(root.resolve("gradle.properties"),
+                "license=MIT\nlicense_author=Alice, Bob, Sumire Labs\nlicense_year=2026\n");
+        Path source = root.resolve("src/main/java/example/Example.java");
+        write(source, "package example;\nclass Example {}\n");
+        run(root, "generateLicense", "applyLicenseHeader", "checkLicense", "--configuration-cache").build();
+        String header = read(root.resolve("HEADER"));
+        assertTrue(header.contains(" * Copyright (c) 2026 Alice\n * Copyright (c) 2026 Bob\n"
+                + " * Copyright (c) 2026 Sumire Labs\n"));
+        assertTrue(read(source).startsWith(header));
+        String licenseText = read(root.resolve("LICENSE.md"));
+        assertTrue(licenseText.contains("Copyright (c) 2026 Alice\nCopyright (c) 2026 Bob\n"));
+        run(root, "checkLicense", "--configuration-cache").build();
+        BuildResult reused = run(root, "checkLicense", "--configuration-cache").build();
+        assertTrue(reused.getOutput().contains("Reusing configuration cache."));
+        write(root.resolve("LICENSE.md"), licenseText.replace("Copyright (c) 2026 Bob\n", ""));
+        BuildResult missing = run(root, "checkLicense", "--configuration-cache").buildAndFail();
+        assertTrue(missing.getOutput().contains("License file does not match"));
+    }
+
     private static GradleRunner run(Path root, String... tasks) {
         return GradleRunner.create().withProjectDir(root.toFile()).withPluginClasspath().withArguments(tasks);
     }
