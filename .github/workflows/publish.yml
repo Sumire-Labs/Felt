@@ -1,0 +1,53 @@
+name: Publish Maven
+
+on:
+  push:
+    tags: ['v[0-9]*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: felt-maven-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check release configuration
+        env:
+          MAVEN_USER: ${{ secrets.MAVEN_USER }}
+          MAVEN_PASS: ${{ secrets.MAVEN_PASS }}
+        run: |
+          version=$(sed -n -E 's/^version[[:space:]]*=[[:space:]]*([^[:space:]]+)[[:space:]]*$/\1/p' gradle.properties)
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo 'Set a release version in gradle.properties.' >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_REF_TYPE" == tag && "${GITHUB_REF_NAME#v}" != "$version" ]]; then
+            echo 'The version tag must match gradle.properties.' >&2
+            exit 1
+          fi
+          if [[ -z "$MAVEN_USER" || -z "$MAVEN_PASS" ]]; then
+            echo 'Set the MAVEN_USER and MAVEN_PASS repository secrets.' >&2
+            exit 1
+          fi
+      - uses: actions/setup-java@v6.2.0
+        with:
+          distribution: temurin
+          java-version: |
+            8
+            17
+      - uses: gradle/actions/setup-gradle@v6.4.1
+      - name: Build and test
+        run: ./gradlew clean build -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_8_X64,JAVA_HOME_17_X64 --console=plain
+      - name: Publish Maven artifacts
+        env:
+          ORG_GRADLE_PROJECT_feltUsername: ${{ secrets.MAVEN_USER }}
+          ORG_GRADLE_PROJECT_feltPassword: ${{ secrets.MAVEN_PASS }}
+        run: ./gradlew publish --no-configuration-cache --console=plain
